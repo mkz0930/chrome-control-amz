@@ -38,7 +38,8 @@ source .alias.sh
 relay-test
 ```
 
-Then run `full_flow.py` or `grab_amazon.py` - **100% automated!**
+然后打开 **亚马逊搜索页** → 点击插件图标 → **「刷新插件信息」**（自动附加标签页）  
+_icon 变绿 ✅ 后 → 运行 `full_flow.py` 或 `grab_amazon.py` - **100% automated!_**
 
 ## 📚 Documentation
 
