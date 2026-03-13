@@ -1,0 +1,41 @@
+{
+  "skill_name": "chrome-relay-browser-control",
+  "evals": [
+    {
+      "id": "simple-navigate",
+      "name": "导航到指定 URL",
+      "prompt": "命令浏览器打开 https://www.amazon.com/s?k=light",
+      "expected_output": "浏览器标签页加载成功，URL 包含 amazon.com/s?k=light",
+      "files": [],
+      "assertions": [
+        "页面成功加载（navigate 完成）",
+        "标题包含 'Amazon' 或搜索结果",
+        "无 404 错误或超时"
+      ]
+    },
+    {
+      "id": "search-action",
+      "name": "执行搜索操作",
+      "prompt": "在 Windows Chrome 中打开亚马逊，搜索关键词 'LED'",
+      "expected_output": "搜索结果页显示 'LED' 相关商品，URL 包含 '?k=LED'",
+      "files": [],
+      "assertions": [
+        "导航到 amazon.com 成功",
+        "搜索关键词 'LED' 已输入并提交",
+        "结果页显示搜索结果（非空）"
+      ]
+    },
+    {
+      "id": "seller sprite integration",
+      "name": "卖家精灵数据抓取",
+      "prompt": "打开亚马逊，点击卖家精灵扩展，提取当前页面的产品数据",
+      "expected_output": "成功提取产品 name, price, sales, rating 等字段",
+      "files": [],
+      "assertions": [
+        "卖家精灵扩展已激活（click_text '卖家精灵' 成功）",
+        "DOM 文本可读（get_text 不为空）",
+        "提取到至少 1 个产品条目"
+      ]
+    }
+  ]
+}

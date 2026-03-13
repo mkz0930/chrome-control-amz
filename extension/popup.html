@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html style="width: 300px; padding: 16px; font-family: system-ui, -apple-system, sans-serif;">
+<head>
+  <meta charset="UTF-8">
+  <title>OpenClaw Browser Relay</title>
+  <style>
+    body { margin: 0; padding: 0; }
+    .status { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .indicator { width: 12px; height: 12px; border-radius: 50%; }
+    .indicator.connected { background: #22c55e; }
+    .indicator.disconnected { background: #ef4444; }
+    .url { font-size: 12px; color: #666; word-break: break-all; background: #f5f5f5; padding: 8px; border-radius: 4px; }
+    .actions { display: flex; gap: 8px; margin-top: 12px; }
+    button { flex: 1; padding: 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    button.primary { background: #007bff; color: white; }
+    button.secondary { background: #e0e0e0; }
+    button:hover { opacity: 0.9; }
+    .info { font-size: 11px; color: #888; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="status">
+    <div class="indicator" id="indicator"></div>
+    <strong id="statusText">Connecting...</strong>
+  </div>
+  
+  <div class="url" id="urlDisplay">Loading...</div>
+  
+  <div class="actions">
+    <button class="secondary" id="refreshBtn">🔄 Refresh</button>
+    <button class="primary" id="reconnectBtn">🔌 Reconnect</button>
+  </div>
+  
+  <div class="info">
+    <div>Server: ws://localhost:9997</div>
+    <div id="retryInfo"></div>
+  </div>
+  
+  <script>
+    async function updateStatus() {
+      try {
+        const response = await chrome.runtime.sendMessage({ type: "get_status" });
+        const indicator = document.getElementById("indicator");
+        const statusText = document.getElementById("statusText");
+        const retryInfo = document.getElementById("retryInfo");
+        
+        if (response.connected) {
+          indicator.className = "indicator connected";
+          statusText.textContent = "✅ Connected";
+          retryInfo.textContent = "";
+        } else {
+          indicator.className = "indicator disconnected";
+          statusText.textContent = "❌ Disconnected";
+          retryInfo.textContent = `Retry attempt: ${response.retry_count || 0}`;
+        }
+        
+        // Get current tab URL
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        document.getElementById("urlDisplay").textContent = tab?.url || "No active tab";
+        
+      } catch (e) {
+        document.getElementById("statusText").textContent = "⚠️ Error: " + e.message;
+      }
+    }
+    
+    document.getElementById("refreshBtn").addEventListener("click", updateStatus);
+    
+    document.getElementById("reconnectBtn").addEventListener("click", async () => {
+      await chrome.runtime.sendMessage({ type: "reconnect" });
+      updateStatus();
+    });
+    
+    // Initial update
+    updateStatus();
+  </script>
+</body>
+</html>
