@@ -7,6 +7,9 @@ Combined Chrome Extension Control Skill for Amazon - Merge of chrome-relay-brows
 ## ✨ Features
 
 - ✅ **Full Automation Mode** - No manual attach required. Python scripts click seller sprite & export data automatically.
+- ✅ **Auto-Click Seller Sprite** - Automatic click on "卖家精灵" button on Amazon pages
+- ✅ **Auto-Select All Products** - Automatic click on "全选" button after sprite injection
+- ✅ **Auto-Export Data** - Automatic export of seller sprite table data
 - ✅ Full Chrome extension relay control
 - ✅ Python WebSocket automation
 - ✅ Click seller sprite & extract data
@@ -20,10 +23,12 @@ Combined Chrome Extension Control Skill for Amazon - Merge of chrome-relay-brows
 | `extension/` | Chrome extension source (background.js, manifest.json) |
 | `server/` | WebSocket relay server (Python 3.10+) |
 | `click_seajin.py` | Click seller sprite button |
-| `grab_amazon.py` | Full Amazon data extraction |
+| `grab_amazon.py` | Full Amazon data extraction (with auto-click flow) |
 | `simple_test.py` | Quick connection test |
 | `full_flow.py` | Complete flow: open → search → click sprite → full → export → get_html |
-| `install.sh` | One-click installation script |
+| `install.sh` | One-click installation script (auto-starts server) |
+| `.alias.sh` | Quick commands: `relay-test`, `relay-status`, `relay-log` |
+| `README-zh.md` | 中文版本 |
 
 ## 🚀 Quick Start
 
@@ -33,7 +38,7 @@ source .alias.sh
 relay-test
 ```
 
-Then run your Python script - **fully automated!**
+Then run `full_flow.py` or `grab_amazon.py` - **100% automated!**
 
 ## 📚 Documentation
 
