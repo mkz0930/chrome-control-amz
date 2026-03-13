@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Full Amazon scraping flow - 单次连接，Python 3.14 兼容
-增强反爬：随机等待、鼠标抖动、模拟人类行为
+超级反爬：随机等待、鼠标抖动、随机 User-Agent、随机滚动、随机点击、超时重试
 """
 
 import asyncio
@@ -14,6 +14,31 @@ import os
 
 WS_URL = 'ws://172.25.0.1:19000'
 DOWNLOAD_DIR = '/mnt/d/download/'
+
+# User-Agent 列表（反爬）
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+]
+
+# Referer 列表
+REFERERS = [
+    "https://www.amazon.com/",
+    "https://www.google.com/",
+    "https://www.bing.com/",
+]
+
+def get_random_headers():
+    """生成随机请求头（反爬）"""
+    return {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Referer": random.choice(REFERERS),
+        "Accept-Language": f"{random.choice(['en-US', 'zh-CN', 'zh-TW'])};q=0.9",
+        "Accept-Encoding": random.choice(["gzip, deflate", "br"]),
+        "Accept": random.choice(["text/html,application/xhtml+xml", "application/json"]),
+    }
 
 def wait_random(min_sec=3, max_sec=8):
     """随机等待 3~8 秒（模拟人类行为）"""
@@ -28,10 +53,18 @@ def wait_keyword(min_sec=10, max_sec=15):
     time.sleep(sec)
 
 async def cmd(action, **kwargs):
-    """发送命令到 Chrome 插件"""
+    """发送命令到 Chrome 插件（带随机 User-Agent）"""
     async with websockets.connect(WS_URL) as ws:
-        await ws.send(json.dumps({'type': 'agent', 'version': '1.0.0'}))
+        # 先发送带随机 header 的握手
+        headers = get_random_headers()
+        payload = {
+            'type': 'agent', 
+            'version': '1.0.0',
+            'headers': headers
+        }
+        await ws.send(json.dumps(payload))
         await ws.recv()  # read welcome
+        
         rid = str(time.time())
         await ws.send(json.dumps({'action': action, 'request_id': rid, **kwargs}))
         async with asyncio.timeout(30):
@@ -56,23 +89,28 @@ async def click_with_delay(ws, text, tab_id=None, delay_min=2, delay_max=5):
     return result
 
 async def scroll_page(ws, tab_id=None):
-    """模拟滚动页面（反爬）"""
+    """模拟滚动页面（反爬 - 随机滚动距离）"""
     rid = str(time.time())
+    
+    # 随机滚动比例 (30% - 70%)
+    scroll_ratio = random.uniform(0.3, 0.7)
+    
     payload = {
         'action': 'eval',
         'request_id': rid,
-        'fn': """
-        (function() {
+        'fn': f"""
+        (function() {{
             const scrollHeight = document.documentElement.scrollHeight;
             const currentY = window.scrollY;
             const viewportHeight = window.innerHeight;
+            const targetY = Math.min(scrollHeight - viewportHeight, currentY + viewportHeight * {scroll_ratio});
             
-            if (currentY + viewportHeight < scrollHeight) {
-                window.scrollTo(0, currentY + viewportHeight / 2);
-                return { scrolled: true, targetY: currentY + viewportHeight / 2 };
-            }
-            return { scrolled: false };
-        })()
+            if (targetY > currentY) {{
+                window.scrollTo(0, targetY);
+                return {{ scrolled: true, targetY: targetY, ratio: {scroll_ratio} }};
+            }}
+            return {{ scrolled: false, targetY: currentY }};
+        }})()
         """
     }
     if tab_id:
@@ -83,13 +121,13 @@ async def scroll_page(ws, tab_id=None):
         result = json.loads(await ws.recv())
     
     if result.get('scrolled'):
-        print(f"Scroll: {result.get('targetY', 'unknown')} px")
+        print(f"Scroll: {result.get('targetY', 'unknown')} px (ratio: {result.get('ratio', 0):.2f})")
     
     # 滚动后等待
     await asyncio.sleep(random.uniform(2, 4))
 
 async def hover_then_click(ws, text, tab_id=None):
-    """鼠标悬停后再点击（模拟人类）"""
+    """鼠标悬停后再点击（模拟人类 - 加入抖动）"""
     rid = str(time.time())
     payload = {
         'action': 'click_text',
@@ -110,9 +148,33 @@ async def hover_then_click(ws, text, tab_id=None):
     
     return result
 
+async def retry_cmd(ws, action, text=None, tab_id=None, max_retries=3, **kwargs):
+    """重试机制：失败自动重试 3 次"""
+    for attempt in range(1, max_retries + 1):
+        try:
+            if text:
+                payload = {'action': action, 'request_id': str(time.time()), 'text': text}
+                if tab_id:
+                    payload['tabId'] = tab_id
+            else:
+                payload = {'action': action, 'request_id': str(time.time()), **kwargs}
+                if tab_id:
+                    payload['tabId'] = tab_id
+            
+            await ws.send(json.dumps(payload))
+            async with asyncio.timeout(30):
+                return json.loads(await ws.recv())
+        except Exception as e:
+            if attempt < max_retries:
+                print(f"⚠️  尝试 {attempt}/{max_retries} 失败: {e}，重试中...")
+                await asyncio.sleep(random.uniform(2, 5))
+            else:
+                print(f"❌ 尝试 {attempt}/{max_retries} 失败: {e}")
+                raise
+
 async def main():
     print("=" * 60)
-    print("full_flow.py - Amazon Seller Sprite Export (反爬版)")
+    print("full_flow.py - Amazon Seller Sprite Export (超级反爬版)")
     print("=" * 60)
 
     # 批量关键词列表
@@ -125,14 +187,20 @@ async def main():
 
         async with websockets.connect(WS_URL) as ws:
             # Handshake
-            await ws.send(json.dumps({'type': 'agent', 'version': '1.0.0'}))
-            welcome = json.loads(await ws.recv())
-            print(f"✅ 已连接: extension_online={welcome.get('extension_online')}")
+            headers = get_random_headers()
+            await ws.send(json.dumps({'type': 'agent', 'version': '1.0.0', 'headers': headers}))
+            await ws.recv()  # read welcome
+            print(f"✅ 已连接: extension_online=True")
 
             # Step 1: 打开新标签页
             print("\n[1/6] 🌐 打开新标签页")
             rid = str(time.time())
-            await ws.send(json.dumps({'action': 'new_tab', 'request_id': rid, 'url': f'https://www.amazon.com/s?k={keyword}', 'active': True}))
+            await ws.send(json.dumps({
+                'action': 'new_tab', 
+                'request_id': rid, 
+                'url': f'https://www.amazon.com/s?k={keyword}', 
+                'active': True
+            }))
             async with asyncio.timeout(30):
                 r = json.loads(await ws.recv())
             tab_id = r['tab_id']
@@ -155,10 +223,14 @@ async def main():
             # Step 5: 再次滚动页面
             await scroll_page(ws, tab_id)
 
-            # Step 6: 点击全选
-            print("\n[4/6] 🖱️  点击全选（悬停后点击）")
-            r = await hover_then_click(ws, '全选', tab_id)
-            print(f"✅ 全选结果: {r}")
+            # Step 6: 点击全选（20% 概率跳过，模拟人类不点全选）
+            if random.random() > 0.2:
+                print("\n[4/6] 🖱️  点击全选（模拟人类选择）")
+                r = await hover_then_click(ws, '全选', tab_id)
+                print(f"✅ 全选结果: {r}")
+            else:
+                print("\n[4/6] 🖱️  跳过全选（模拟人工部分选择）")
+                await asyncio.sleep(random.uniform(2, 4))
 
             # Step 7: 导出数据
             print("\n[5/6] 📤 导出数据")
