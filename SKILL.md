@@ -39,10 +39,10 @@ ss -tlnp | grep :18792
 
 ---
 
-## 2. Windows 插件配置（全自动版）
+## 2. Windows 插件配置（反爬优化版）
 
 ✅ **无需手动操作！**  
-插件已配置为**后台常驻 + 自动附加标签页**模式。
+插件已配置为**后台常驻 + 自动附加标签页**模式，支持反爬机制。
 
 **安装步骤**：
 
@@ -58,6 +58,13 @@ ss -tlnp | grep :18792
 
 3. **验证**  
    运行 `relay-test` 命令，应返回 `extension_online: true`
+
+**✅ 反爬机制**：
+- 随机等待：3-8 秒（模拟人类行为）
+- 鼠标抖动：点击前抖动 2px
+- 悬停模拟：mousemove + 300ms 延迟 → click
+- 页面滚动：每次操作前滚动 50% 高度
+- 关键词延迟：10-15 秒（避免触发反爬）
 
 ---
 
@@ -345,7 +352,8 @@ print("=" * 60)
 - **Verified**: ✅ 卖家精灵点击成功（2026-03-13）
 - **Verified**: ✅ 批量关键词导出流程（2026-03-13）
 - **Verified**: ✅ Clean Excel + Bitable CSV 生成（2026-03-13）
-- **Last Updated**: 2026-03-13 17:10 (Updated with batch flow + cleaning script + Bitable CSV)
+- **Verified**: ✅ 反爬机制：随机等待、鼠标抖动、悬停、滚动（2026-03-13）
+- **Last Updated**: 2026-03-13 17:26 (Updated with anti-spider mode + detail)
 
 ---
 
