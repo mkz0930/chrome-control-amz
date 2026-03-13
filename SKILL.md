@@ -39,18 +39,25 @@ ss -tlnp | grep :18792
 
 ---
 
-## 2. Windows 插件配置
+## 2. Windows 插件配置（全自动版）
 
-1. **安装扩展**  
-   - 在 Windows Chrome 加载自研扩展（开发者模式 → 加载解压的扩展）
+✅ **无需手动操作！**  
+插件已配置为**后台常驻 + 自动附加标签页**模式。
 
-2. **附加标签页**  
+**安装步骤**：
+
+1. **加载扩展**  
+   - 在 Windows Chrome → `chrome://extensions`  
+   - 打开「开发者模式」  
+   - 点击「加载已解压的扩展程序」→ 选择 `extension/` 目录
+
+2. **自动运行**  
    - 打开任意亚马逊页（如 `https://www.amazon.com/s?k=light`）
-   - 点击插件图标 → **「附加当前标签页」**
-   - 确认图标变 **绿 ✅**（非红/闪烁）
+   - 插件自动附加，图标变 **绿 ✅**
+   - 无需点击插件图标！无需手动附加！
 
-3. **端口确认**  
-   插件弹窗应显示：`Connected to 172.25.0.1:19000`
+3. **验证**  
+   运行 `relay-test` 命令，应返回 `extension_online: true`
 
 ---
 
@@ -139,13 +146,16 @@ asyncio.run(main())
 
 ---
 
-## ⚠️ 3 个必须绕过的坑
+## ⚠️ 2 个必须绕过的坑
 
 1. **`PortInUseError`**  
    `browser.*` OpenClaw 工具会报错 → 用 Python WS 命令代替
 
 2. **`cdpHttp: false`**  
-   表示插件没附加标签页 → 在 Windows 插件里点击「附加当前标签页」
+   表示插件未连接 → 检查：  
+   - Windows Chrome 扩展是否加载？  
+   - Linux Server 是否运行（`ss -tlnp \| grep :19000`）  
+   - 重启 `./install.sh` 并运行 `relay-test`
 
 3. **server 崩了**  
    用 `monitor.sh` 保活，或手动重启
@@ -163,12 +173,14 @@ asyncio.run(main())
 2. **Python 脚本能否连接？**
    ```bash
    python3 test_relay.py
+   # 或
+   source .alias.sh && relay-test
    # 应返回 extension_online: true
    ```
 
-3. **Windows 插件是否 Attach？**
-   - 图标绿 ✅（非红/闪烁）
-   - 弹窗显示 `Connected to 172.25.0.1:19000`
+3. **Windows 插件状态**  
+   - 图标 **绿 ✅**（表示已连接）  
+   - 无需点击插件图标，自动附加标签页  
 
 ---
 
