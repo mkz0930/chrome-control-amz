@@ -92,51 +92,22 @@ async def hover_then_click(ws, text, tab_id=None):
     """鼠标悬停后再点击（模拟人类）"""
     rid = str(time.time())
     payload = {
-        'action': 'evaluate',
+        'action': 'click_text',
         'request_id': rid,
-        'fn': f"""
-        (function() {{
-            const el = Array.from(document.querySelectorAll('*')).find(e => 
-                e.textContent.includes('{text}') && e.offsetParent !== null
-            );
-            if (el) {{
-                const rect = el.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                
-                // 鼠标悬停
-                const hoverEvent = new MouseEvent('mousemove', {{
-                    bubbles: true,
-                    clientX: centerX,
-                    clientY: centerY
-                }});
-                document.dispatchEvent(hoverEvent);
-                
-                // 等待 300-600ms
-                await new Promise(r => setTimeout(r, Math.random() * 300 + 300));
-                
-                // 再点击
-                const clickEvent = new MouseEvent('click', {{
-                    bubbles: true,
-                    clientX: centerX + (Math.random() - 0.5) * 2, // 鼠标抖动 2px
-                    clientY: centerY + (Math.random() - 0.5) * 2
-                }});
-                el.dispatchEvent(clickEvent);
-                
-                return {{ success: true, x: centerX, y: centerY }};
-            }}
-            return {{ success: false }};
-        }})()
-        """
+        'text': text
     }
     if tab_id:
         payload['tabId'] = tab_id
     
     await ws.send(json.dumps(payload))
-    async with asyncio.timeout(10):
+    async with asyncio.timeout(30):
         result = json.loads(await ws.recv())
     
-    print(f"🖱️  悬停后点击 '{text}': {result}")
+    print(f"🖱️  点击 '{text}': {result}")
+    
+    # 点击后等待随机时长
+    await asyncio.sleep(random.uniform(2, 5))
+    
     return result
 
 async def main():
