@@ -100,7 +100,7 @@ async def scroll_page(ws, tab_id=None):
     
     await asyncio.sleep(random.uniform(2, 4))
 
-async def hover_then_click(ws, text, tab_id=None):
+async def hover_then_click(ws, text, tab_id=None, delay_min=2, delay_max=5):
     """鼠标悬停后再点击（模拟人类）"""
     rid = str(time.time())
     payload = {'action': 'click_text', 'request_id': rid, 'text': text}
@@ -112,7 +112,7 @@ async def hover_then_click(ws, text, tab_id=None):
         result = json.loads(await ws.recv())
     
     print(f"🖱️  点击 '{text}': {result}")
-    await asyncio.sleep(random.uniform(2, 5))
+    await asyncio.sleep(random.uniform(delay_min, delay_max))
     
     return result
 
