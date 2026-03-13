@@ -262,7 +262,7 @@ async def main():
     print("full_flow.py - Amazon Seller Sprite Export (飞书版)")
     print("=" * 60)
 
-    keywords = ['light', 'lamp', 'bulb', 'torch', 'led']
+    keywords = ['laptop', 'laptops', 'notebook', ' ultrabook']
 
     for keyword in keywords:
         print(f"\n{'=' * 40}")
@@ -285,7 +285,7 @@ async def main():
             await asyncio.sleep(random.uniform(4, 7))
 
             # Step 2: 滚动页面
-            await scroll_page(ws, tab_id)
+            print("\n[2/6] 📜 滚动页面（模拟浏览）")
 
             # Step 3: 点击卖家精灵
             print("\n[3/6] 🖱️  点击卖家精灵")
@@ -293,10 +293,11 @@ async def main():
             print(f"✅ 卖家精灵: {r}")
 
             # Step 4: 等待数据注入
-            print("⏳ 等待卖家精灵注入数据（10-15 秒）...")
-            await asyncio.sleep(random.uniform(10, 15))
+            print("⏳ 等待卖家精灵注入数据（15-20 秒）...")
+            await asyncio.sleep(random.uniform(15, 20))
 
             # Step 5: 滚动页面
+            print("\n[5/6] 📜 滚动页面（再次模拟浏览）")
             await scroll_page(ws, tab_id)
 
             # Step 6: 点击全选（20% 概率跳过）
@@ -309,7 +310,7 @@ async def main():
                 await asyncio.sleep(random.uniform(2, 4))
 
             # Step 7: 导出数据
-            print("\n[5/6] 📤 导出数据")
+            print("\n[6/6] 📤 导出数据")
             r = await hover_then_click(ws, '导出', tab_id, delay_min=3, delay_max=6)
             print(f"✅ 导出: {r}")
             await asyncio.sleep(random.uniform(8, 12))
@@ -342,6 +343,7 @@ async def main():
             print(f"✅ 截图: {'ok' if r.get('ok') else r}")
 
         print(f"\n📊 分析文件并创建飞书文档...")
+        result = await analyze_excel_and_create_feishu_doc(keyword, raw_file)
         result = await analyze_excel_and_create_feishu_doc(keyword, raw_file)
 
         print(f"\n✅ 关键词 '{keyword}' 处理完成！")
