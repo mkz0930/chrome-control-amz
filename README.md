@@ -14,7 +14,7 @@ Combined Chrome Extension Control Skill for Amazon - Merge of chrome-relay-brows
 - ✅ Python WebSocket automation
 - ✅ Click seller sprite & extract data
 - ✅ One-click install + auto-detection
-- ✅ **Verified**: Seller sprite click + full export flow works end-to-end (2026-03-13)
+- ✅ **Verified**: Seller sprite click + full export flow works end-to-end (2026-03-13 **latest: complete export flow**)
 
 ## 📋 Files
 
@@ -49,3 +49,4 @@ Then run `full_flow.py` or `grab_amazon.py` - **100% automated!**
 
 - Horse (mkz0930@gmail.com)
 - Date: 2026-03-13
+- **Last Updated**: 2026-03-13 16:42 (Added full export flow + Python script + Excel parsing)

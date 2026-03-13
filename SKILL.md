@@ -196,11 +196,135 @@ asyncio.run(main())
 
 ---
 
+## ✅ 最长流程：完整亚马逊卖家精灵数据导出（2026-03-13 验证通过）
+
+> **目标**：通过自动化脚本，打开亚马逊搜索页 → 触发卖家精灵 → 全选产品 → 导出 Excel 文件  
+> **输出文件格式**：`Search(keyword)-[N]-US-[YYYYMMDD].xlsx`
+
+---
+
+### 📋 完整流程步骤
+
+| 步骤 | 动作 | Python 命令 | 等待时间 | 说明 |
+|------|------|-------------|----------|------|
+| 1 | 打开亚马逊搜索页 | `cmd('navigate', url='https://www.amazon.com/s?k=light')` | 4 秒 | 替换 `light` 为其他关键词 |
+| 2 | 点击卖家精灵 | `cmd('click_text', text='卖家精灵')` | 15 秒 | **关键：等待数据注入** |
+| 3 | 全选产品 | `cmd('click_text', text='全选')` | 2 秒 | 选中所有产品 |
+| 4 | 导出 Excel | `cmd('click_text', text='导出')` | 下载 | 文件保存在 `C:\Downloads` 或 `/mnt/d/download/` |
+
+---
+
+### 📝 完整 Python 脚本（2026-03-13 验证版）
+
+```python
+# full_flow.py - 卖家精灵产品数据导出完整流程
+import asyncio
+import websockets
+import json
+import time
+import os
+
+WS_URL = 'ws://172.25.0.1:19000'  # 与 server.py 保持一致
+
+def wait(n):
+    print(f"⏳ 等待 {n} 秒...")
+    time.sleep(n)
+
+async def cmd(action, **kwargs):
+    async with websockets.connect(WS_URL) as ws:
+        await ws.send(json.dumps({'type': 'agent', 'version': '1.0.0'}))
+        await ws.recv()  # read welcome
+        rid = str(asyncio.get_event_loop().time())
+        await ws.send(json.dumps({'action': action, 'request_id': rid, **kwargs}))
+        return json.loads(await asyncio.wait_for(ws.recv(), timeout=30))
+
+async def main():
+    print("=" * 60)
+    print("full_flow v6 - Amazon Seller Sprite Export")
+    print("=" * 60)
+
+    # 1. 打开亚马逊搜索页（替换 light 为其他关键词）
+    print("\n[1] 🌐 打开亚马逊搜索页")
+    r = await cmd('navigate', url='https://www.amazon.com/s?k=light')
+    print(f"✅ 打开: {r}")
+    wait(4)
+
+    # 2. 点击卖家精灵 → 展开数据
+    print("\n[2] 🔍 点击卖家精灵")
+    r = await cmd('click_text', text='卖家精灵')
+    print(f"✅ 卖家精灵: {r}")
+    wait(15)  # 重点：必须等待数据注入！
+
+    # 3. 全选产品
+    print("\n[3] ✔️  全选产品")
+    r = await cmd('click_text', text='全选')
+    print(f"✅ 全选: {r}")
+    wait(2)
+
+    # 4. 导出 Excel
+    print("\n[4] 📤 导出数据")
+    r = await cmd('click_text', text='导出')
+    print(f"✅ 导出: {r}")
+    
+    # 4.5 截图验证
+    r = await cmd('screenshot', format='png')
+    import base64
+    with open('/tmp/chrome-control-amz/screenshot_export.png', 'wb') as f:
+        f.write(base64.b64decode(r['data'].split(',')[1]))
+    print("✅ 截图已保存: /tmp/chrome-control-amz/screenshot_export.png")
+
+    # 5. 等待文件下载并验证
+    print("\n[5] ⏳ 等待文件下载...")
+    download_dir = '/mnt/d/download/'
+    files_before = set(os.listdir(download_dir))
+    for i in range(60):  # 等待最多 60 秒
+        files_after = set(os.listdir(download_dir))
+        new_files = files_after - files_before
+        if new_files:
+            print(f"✅ 新文件: {new_files}")
+            for f in new_files:
+                path = os.path.join(download_dir, f)
+                print(f"  - {f} ({os.path.getsize(path)} bytes)")
+            break
+        print(f"  等待中... ({i}s)")
+        time.sleep(1)
+
+    print("\n" + "=" * 60)
+    print("✅ 完成！")
+    print("=" * 60)
+
+asyncio.run(main())
+```
+
+---
+
+### 🗂️ Excel 文件命名规则
+
+| 文件名 | 类型 | 说明 |
+|--------|------|------|
+| `Search(light)-10-US-20260313.xlsx` | ✅ 正确 | 产品销量数据（10 个结果）|
+| `KeywordHistory-light-US-20260313.xlsx` | ❌ 错误 | 关键词历史数据 |
+
+---
+
+### 📊 Excel 数据结构（Products sheet）
+
+| 序号 | ASIN | Size | Weight | ... |
+|------|------|------|--------|-----|
+| 1-11 | 商品唯一标识 | 尺寸（如 `32.26 x 8.64 x 1.78 cm`）| 重量（如 `331.12 g`）| 共 71 列 |
+
+**其他 Sheets**：
+- `Brands`: 5 个品牌（MCGOR, Philips, hykolity, Gritin, Govee）
+- `Sellers`: 6 个卖家信息
+- `Note`: 客服电话 + 插件使用指南
+
+---
+
 ## ✅ 作者
 
 - Author: 马振坤
 - Email: mkz0930@gmail.com
 - Date: 2026-03-13
 - **Verified**: ✅ 卖家精灵点击成功（2026-03-13）
-- **Last Updated**: 2026-03-13 (Updated with working click_text example + debug log output)
+- **Last Updated**: 2026-03-13 16:42 (Updated with full export flow + Python script + Excel parsing)
 - **Verified**: ✅ 卖家精灵点击成功（2026-03-13）
