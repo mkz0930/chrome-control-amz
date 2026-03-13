@@ -1,6 +1,7 @@
 ---
 name: chrome-relay-browser-control
 description: "控制 Windows Chrome 插件，打开网页、抓取亚马逊卖家精灵数据。支持 click/click_text/type/navigate/get_html 等完整命令。绕过 PortInUseError，用 Python WebSocket 命令。"
+
 ---
 
 ## ✅ 核心优势
@@ -81,15 +82,31 @@ ss -tlnp | grep :18792
 
 ## 3. Python WebSocket 完整命令
 
-### 通用发送函数
+### 通用发送函数（带随机 User-Agent）
 ```python
 import asyncio, websockets, json
 
 WS_URL = 'ws://172.25.0.1:19000'  # 或 18792
 
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0",
+]
+
+def get_random_headers():
+    """生成随机请求头（反爬）"""
+    return {
+        "User-Agent": random.choice(USER_AGENTS),
+        "Referer": random.choice(["https://www.amazon.com/", "https://www.google.com/", "https://www.bing.com/"]),
+        "Accept-Language": f"{random.choice(['en-US', 'zh-CN', 'zh-TW'])};q=0.9",
+    }
+
 async def cmd(action, **kwargs):
     async with websockets.connect(WS_URL) as ws:
-        await ws.send(json.dumps({'type': 'agent', 'version': '1.0.0'}))
+        headers = get_random_headers()
+        await ws.send(json.dumps({'type': 'agent', 'version': '1.0.0', 'headers': headers}))
         await ws.recv()  # welcome
         rid = str(asyncio.get_event_loop().time())
         await ws.send(json.dumps({'action': action, 'request_id': rid, **kwargs}))
@@ -123,15 +140,15 @@ async def main():
     r = await cmd('navigate', url='https://www.amazon.com/s?k=camping')
     print('Opened:', r)
     
-    # 2. 等待加载
-    await asyncio.sleep(3)
+    # 2. 等待加载（随机 4-7 秒）
+    await asyncio.sleep(random.uniform(4, 7))
     
     # 3. 点击卖家精灵（按钮）
     r = await cmd('click_text', text='卖家精灵')
     print('Clicked seller sprite:', r)
     
-    # 4. 等待注入数据
-    await asyncio.sleep(2)
+    # 4. 等待注入数据（10-15 秒）
+    await asyncio.sleep(random.uniform(10, 15))
     
     # 5. 抓取 DOM HTML
     r = await cmd('get_html', selector='div.s-main-slot')
@@ -156,7 +173,7 @@ asyncio.run(main())
 | OpenClaw 工具 | 是否可用 | 推荐替代 |
 |---------------|----------|----------|
 | `browser(action="open", ...)` | ❌ 报 `PortInUseError` | 用 `cmd('navigate', url=...)` |
-| `browser(action="click", ...)` | ❌ 端口冲突 | 用 `cmd('click', selector='...')` |
+| `browser(action="click`, ...)` | ❌ 端口冲突 | 用 `cmd('click', selector='...')` |
 | `browser(action="snapshot", ...)` | ❌ 端口冲突 | 用 `cmd('get_html', ...)` |
 | `browser(action="screenshot", ...)` | ❌ 端口冲突 | 用 Windows `Win+Shift+S` 截图 |
 
@@ -211,6 +228,9 @@ asyncio.run(main())
 | `start-server.sh` | 启动脚本（nohup + monitor.sh）|
 | `test_relay.py` | 直接发送命令的测试脚本|
 | `do-amazon.py` | 完整亚马逊抓取示例|
+| `full_flow.py` | **批量版 + 反爬版**（推荐）|
+| `clean_excel.py` | 清洗 Excel，生成 `CLEAN-US-20260313.xlsx`|
+| `export_to_bitable.py` | 生成 Bitable CSV |
 
 ---
 
@@ -248,28 +268,37 @@ keywords = ['light', 'lamp', 'bulb', 'torch', 'led']  # 可以继续添加
 
 | 步骤 | 动作 | Python 命令 | 等待时间 | 说明 |
 |------|------|-------------|----------|------|
-| 1 | 打开亚马逊搜索页 | `cmd('new_tab', url=f'https://www.amazon.com/s?k={keyword}')` | 5 秒 | 替换 `light` 为其他关键词 |
-| 2 | 点击卖家精灵 | `cmd('click_text', text='卖家精灵')` | 12 秒 | **关键：等待数据注入** |
-| 3 | 全选产品 | `cmd('click_text', text='全选')` | 2 秒 | 选中所有产品 |
-| 4 | 导出 Excel | `cmd('click_text', text='导出')` | 8 秒 | 文件保存在 `/mnt/d/download/` |
+| 1 | 打开亚马逊搜索页 | `cmd('new_tab', url=f'https://www.amazon.com/s?k={keyword}')` | 随机 4-7 秒 | 替换 `light` 为其他关键词 |
+| 2 | 点击卖家精灵 | `cmd('click_text', text='卖家精灵')` | 随机 5-10 秒 | **关键：等待数据注入** |
+| 3 | 等待数据注入 | `await asyncio.sleep(random.uniform(10, 15))` | 随机 10-15 秒 | |
+| 4 | 全选产品 | `cmd('click_text', text='全选')` | 随机 2-5 秒 | 20% 概率跳过 |
+| 5 | 导出 Excel | `cmd('click_text', text='导出')` | 随机 3-6 秒 | |
 
 ---
 
-### 📝 完整 Python 脚本（批量版，2026-03-13 验证版）
+### 📝 完整 Python 脚本（批量版 + 反爬版，2026-03-13 验证版）
 
 ```python
-# full_flow.py - 卖家精灵产品数据导出批量版
+# full_flow.py - 卖家精灵产品数据导出（反爬版）
 import asyncio
 import websockets
 import json
 import time
+import random
 import os
 
 WS_URL = 'ws://172.25.0.1:19000'
+DOWNLOAD_DIR = '/mnt/d/download/'
 
-def wait(n):
-    print(f"⏳ 等待 {n} 秒...")
-    time.sleep(n)
+def wait_random(min_sec=3, max_sec=8):
+    sec = random.uniform(min_sec, max_sec)
+    print(f"⏳ 随机等待 {sec:.1f} 秒...")
+    time.sleep(sec)
+
+def wait_keyword(min_sec=10, max_sec=15):
+    sec = random.uniform(min_sec, max_sec)
+    print(f"🔄 关键词间等待 {sec:.1f} 秒...")
+    time.sleep(sec)
 
 async def cmd(action, **kwargs):
     async with websockets.connect(WS_URL) as ws:
@@ -280,29 +309,7 @@ async def cmd(action, **kwargs):
         async with asyncio.timeout(30):
             return json.loads(await ws.recv())
 
-keywords = ['light', 'lamp', 'bulb', 'torch', 'led']  # ← 批量关键词
-
-for keyword in keywords:
-    print(f"\n{'=' * 40}")
-    print(f"🔍 处理关键词: {keyword}")
-    print('=' * 40)
-
-    async with websockets.connect(WS_URL) as ws:
-        # ... 执行 1-4 步骤 ...
-
-        # Step 5: 验证文件下载
-        files_before = set(os.listdir('/mnt/d/download/'))
-        for i in range(60):
-            files_after = set(os.listdir('/mnt/d/download/'))
-            new_files = files_after - files_before
-            if new_files:
-                print(f"✅ 新文件: {new_files}")
-                break
-            await asyncio.sleep(1)
-
-print("\n" + "=" * 60)
-print("✅ 全部关键词处理完成！")
-print("=" * 60)
+# ...（完整代码见 full_flow.py）
 ```
 
 ---
@@ -365,7 +372,7 @@ print("=" * 60)
 - **Verified**: ✅ Clean Excel + Bitable CSV 生成（2026-03-13）
 - **Verified**: ✅ 反爬机制：随机等待、鼠标抖动、悬停、滚动（2026-03-13）
 - **Verified**: ✅ 超级反爬模式：随机UA/Referer/重试/跳过（2026-03-13）
-- **Last Updated**: 2026-03-13 17:37 (Updated with full anti-spider measures + flly_flow.py)
+- **Last Updated**: 2026-03-13 17:41 (Updated with full anti-spider measures + flly_flow.py)
 
 ---
 
