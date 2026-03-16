@@ -84,15 +84,21 @@ else
     fi
 fi
 
-# 生成配置文件
+# 生成配置文件（自动检测当前设备 IP）
 CONFIG_FILE="$SCRIPT_DIR/config.json"
-cat > "$CONFIG_FILE" << 'EOFCONFIG'
+DETECTED_IP=$(python3 -c "import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.connect(('8.8.8.8',80)); print(s.getsockname()[0]); s.close()" 2>/dev/null || hostname -I | awk '{print $1}')
+if [[ -z "$DETECTED_IP" ]]; then
+    DETECTED_IP="172.25.0.1"
+    echo "⚠️  IP 检测失败，使用默认值: $DETECTED_IP"
+else
+    echo "✅ 检测到设备 IP: $DETECTED_IP"
+fi
+cat > "$CONFIG_FILE" << EOFCONFIG
 {
-    "ws_url": "ws://172.25.0.1:19000"
+    "ws_url": "ws://${DETECTED_IP}:19000"
 }
 EOFCONFIG
-
-echo "✅ 配置文件已生成"
+echo "✅ 配置文件已生成: ws://${DETECTED_IP}:19000"
 
 # 创建快捷命令
 _alias_file="$SCRIPT_DIR/.alias.sh"

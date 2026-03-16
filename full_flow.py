@@ -10,7 +10,33 @@ from watchdog.events import FileSystemEventHandler
 sys.path.insert(0, os.path.dirname(__file__))
 from anti_detect import AntiDetect
 
-WS_URL          = 'ws://172.25.0.1:19000'
+def _load_ws_url() -> str:
+    """从 config.json 读取 WS_URL，不存在或为空则自动检测当前设备 IP 并写入。"""
+    import socket
+    config_path = Path(__file__).parent / 'config.json'
+    if config_path.exists():
+        try:
+            cfg = json.loads(config_path.read_text())
+            url = cfg.get('ws_url', '')
+            if url:
+                print(f"🔌 WS_URL from config: {url}")
+                return url
+        except Exception:
+            pass
+    # 自动检测：取连接外网时的本机 IP
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        ip = '172.25.0.1'
+    url = f'ws://{ip}:19000'
+    config_path.write_text(json.dumps({'ws_url': url}, indent=4))
+    print(f"🔌 WS_URL 自动检测并写入 config: {url}")
+    return url
+
+WS_URL          = _load_ws_url()
 APP_ID          = "cli_a90368220db89cd1"
 APP_SECRET      = "R184ONuIpFTCaAIUHsyyxb2eahXZ8ugh"
 CHAT_ID         = "oc_e0c619610b0f4b16593fd16dd9b2d186"
