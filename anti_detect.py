@@ -121,6 +121,47 @@ class AntiDetect:
             pause = random.uniform(0.5, 2.5) if random.random() > 0.3 else random.uniform(2.5, 5.0)
             await asyncio.sleep(pause)
 
+    async def browse_scroll(self):
+        """
+        模拟真实用户浏览页面：
+        - 分段缓慢向下滚动（每段 200~450px）
+        - 偶尔停顿较长（模拟阅读商品）
+        - 偶尔小幅回滚（模拟回看）
+        - 偶尔悬停鼠标（模拟查看商品）
+        - 总时长约 8~18s，让懒加载和卖家精灵数据充分注入
+        """
+        print("🖱️  browse_scroll: 模拟用户浏览页面")
+        total_segments = random.randint(5, 9)
+        for i in range(total_segments):
+            if random.random() < 0.15 and i > 1:
+                # 小幅回滚，模拟回看
+                distance = -random.randint(80, 200)
+                print(f"  ↑ 回滚 {abs(distance)}px")
+            else:
+                distance = random.randint(200, 450)
+                print(f"  ↓ 滚动 {distance}px")
+
+            await self.cmd('scroll', y=distance)
+
+            # 停顿节奏：beta 分布偏短，偶尔长停顿模拟阅读
+            if random.random() < 0.25:
+                pause = random.uniform(2.0, 4.5)
+                print(f"  ⏸  停顿 {pause:.1f}s（阅读中）")
+            else:
+                pause = random.betavariate(2, 4) * 2.0 + 0.5
+                print(f"  ⏸  停顿 {pause:.1f}s")
+            await asyncio.sleep(pause)
+
+            # 偶尔移动鼠标，模拟悬停商品
+            if random.random() < 0.4:
+                await self.bezier_mouse_move(
+                    x1=random.randint(200, 800),
+                    y1=random.randint(200, 500),
+                    steps=random.randint(6, 12)
+                )
+
+        print("✅ browse_scroll 完成")
+
     async def scroll_to_element_area(self, y_hint=400):
         """滚动到目标元素附近区域"""
         await self.cmd('scroll', y=y_hint)

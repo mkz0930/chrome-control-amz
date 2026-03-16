@@ -309,12 +309,30 @@ async def main(keyword='light'):
 
     ad = AntiDetect(tc)
 
-    # 等待页面真正加载完成（而不是固定 sleep）
+    # 等待页面真正加载完成
     await wait_for_condition(
         lambda: tc('eval', code="document.readyState === 'complete'"),
         timeout=30, interval=1, desc="页面加载"
     )
     await ad.after_page_load()
+
+    # 等待商品列表出现（至少有几个商品卡片）
+    send_text(token, "⏳ 等待商品列表渲染...")
+    try:
+        await wait_for_condition(
+            lambda: tc('eval', code="""
+                document.querySelectorAll('.s-result-item[data-asin]').length >= 5
+            """),
+            timeout=20, interval=2, desc="商品列表"
+        )
+        print("✅ 商品列表已渲染")
+    except TimeoutError:
+        print("⚠️ 商品列表等待超时，继续")
+
+    # 模拟真实用户：慢慢滚动浏览页面，让懒加载内容和卖家精灵数据充分加载
+    print("🖱️  模拟用户浏览：缓慢滚动页面...")
+    await ad.browse_scroll()
+
     await screenshot_and_send(tc, token, "Step 1")
     send_text(token, f"✅ Step 1 完成：页面已打开，tab_id={tab_id}")
 
