@@ -90,7 +90,15 @@ function updateIcon(on) {
   chrome.action.setBadgeBackgroundColor({ color: on ? "#22c55e" : "#ef4444" });
 }
 
+// 写状态到 storage（popup 可以随时读取，不依赖 SW 活跃）
+function syncStatusToStorage() {
+  chrome.storage.local.set({
+    relay_status: { connected, ws_url: WS_URL, retry_count: retryCount, ts: Date.now() }
+  });
+}
+
 function broadcastStatus(online) {
+  syncStatusToStorage();
   chrome.runtime.sendMessage({ type: "status_change", connected: online }).catch(() => {});
 }
 
@@ -512,6 +520,7 @@ function sendHeartbeat() {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   log(`📩 popup message: ${msg.type}`);
   if (msg.type === "get_status") {
+    syncStatusToStorage();
     sendResponse({ connected, ws_url: WS_URL, retry_count: retryCount });
   } else if (msg.type === "reconnect") {
     log("🔌 manual reconnect triggered");
