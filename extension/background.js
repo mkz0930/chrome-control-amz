@@ -7,17 +7,23 @@ let retryCount = 0;
 const MAX_RETRIES = 10;
 const WS_URL = "ws://172.25.0.1:19000";
 
+// Timestamped logging
+function log(...args) {
+  const t = new Date().toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  console.log(`[${t}] [relay]`, ...args);
+}
+
 function connect() {
   if (ws && ws.readyState === WebSocket.OPEN) return;
   
-  console.log(`[relay] connecting to ${WS_URL}... (attempt ${retryCount + 1})`);
+  log(` connecting to ${WS_URL}... (attempt ${retryCount + 1})`);
   ws = new WebSocket(WS_URL);
 
   ws.onopen = () => {
     connected = true;
     retryCount = 0;
     ws.send(JSON.stringify({ type: "extension", version: "1.0.0" }));
-    console.log("[relay] ✅ connected to OpenClaw server");
+    log(" ✅ connected to OpenClaw server");
     updateIcon(true);
     broadcastStatus(true);
   };
@@ -30,15 +36,15 @@ function connect() {
     if (retryCount < MAX_RETRIES) {
       retryCount++;
       const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
-      console.log(`[relay] ❌ disconnected, retrying in ${delay/1000}s...`);
+      log(` ❌ disconnected, retrying in ${delay/1000}s...`);
       setTimeout(connect, delay);
     } else {
-      console.log("[relay] ⚠️ max retries reached, stop reconnecting");
+      log(" ⚠️ max retries reached, stop reconnecting");
     }
   };
 
   ws.onerror = (e) => {
-    console.error("[relay] ⚠️ ws error", e);
+    log("⚠️ ⚠️ ws error", e);
   };
 
   ws.onmessage = async (event) => {
@@ -46,17 +52,17 @@ function connect() {
     try { 
       cmd = JSON.parse(event.data); 
     } catch { 
-      console.log("[relay] ⚠️ Invalid JSON received");
+      log(" ⚠️ Invalid JSON received");
       return; 
     }
     
     // Ignore messages without action (like extension identify)
     if (!cmd.action) {
-      console.log("[relay] ← identify/heartbeat received");
+      log(" ← identify/heartbeat received");
       return;
     }
     
-    console.log(`[relay] ← command: ${cmd.action}`);
+    log(` ← command: ${cmd.action}`);
     
     try {
       const result = await handleCommand(cmd);
@@ -67,7 +73,7 @@ function connect() {
         ws.send(JSON.stringify(result));
       }
     } catch (e) {
-      console.error("[relay] ⚠️ Command execution error:", e);
+      log("⚠️ ⚠️ Command execution error:", e);
       ws.send(JSON.stringify({
         ok: false,
         error: e.message,
@@ -494,53 +500,36 @@ function waitForTabLoad(tabId, timeout = 30000) {
   });
 }
 
-// Initialize on extension load
-console.log("[relay] 🚀 OpenClaw Browser Relay starting...");
-connect();
-
-// Keep service worker alive
-setInterval(() => {
-  chrome.runtime.getPlatformInfo(() => {});
-}, 20000);
-
-// 10-minute heartbeat to server
-const HEARTBEAT_INTERVAL = 10 * 60 * 1000; // 10 minutes
-
+// ── Heartbeat ──
 function sendHeartbeat() {
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      type: "heartbeat",
-      timestamp: Date.now(),
-      message: "10-minute heartbeat"
-    }));
-    console.log("[relay] ⏱️ 10-minute heartbeat sent");
+    ws.send(JSON.stringify({ type: "heartbeat", timestamp: Date.now() }));
+    log("⏱️ heartbeat sent");
   }
 }
 
-// Start heartbeat timer
-let heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
-
-// Reset heartbeat on reconnection
-const originalConnect = connect;
-connect = function(...args) {
-  const result = originalConnect.apply(this, args);
-  
-  // Clear previous timer and start new one
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
-  
-  return result;
-};
-
-// Status query from popup or content scripts
+// ── Message handler (popup buttons) ──
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  log(`📩 popup message: ${msg.type}`);
   if (msg.type === "get_status") {
     sendResponse({ connected, ws_url: WS_URL, retry_count: retryCount });
   } else if (msg.type === "reconnect") {
+    log("🔌 manual reconnect triggered");
     retryCount = 0;
-    if (ws) ws.close();
-    connect();
+    if (ws) { try { ws.close(); } catch(e) {} }
+    ws = null;
+    setTimeout(() => connect(), 300);
     sendResponse({ reconnecting: true });
   }
   return true;
 });
+
+// ── Initialize ──
+log("🚀 OpenClaw Browser Relay starting...");
+connect();
+
+// Keep service worker alive
+setInterval(() => chrome.runtime.getPlatformInfo(() => {}), 20000);
+
+// 10-minute heartbeat
+setInterval(sendHeartbeat, 10 * 60 * 1000);
