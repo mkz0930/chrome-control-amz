@@ -1,77 +1,175 @@
 <!DOCTYPE html>
-<html style="width: 300px; padding: 16px; font-family: system-ui, -apple-system, sans-serif;">
+<html style="width: 320px; padding: 16px; font-family: system-ui, -apple-system, sans-serif;">
 <head>
   <meta charset="UTF-8">
-  <title>OpenClaw Browser Relay</title>
+  <title>Chrome Control AMZ</title>
   <style>
     body { margin: 0; padding: 0; }
-    .status { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-    .indicator { width: 12px; height: 12px; border-radius: 50%; }
-    .indicator.connected { background: #22c55e; }
-    .indicator.disconnected { background: #ef4444; }
-    .url { font-size: 12px; color: #666; word-break: break-all; background: #f5f5f5; padding: 8px; border-radius: 4px; }
-    .actions { display: flex; gap: 8px; margin-top: 12px; }
-    button { flex: 1; padding: 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; }
-    button.primary { background: #007bff; color: white; }
-    button.secondary { background: #e0e0e0; }
-    button:hover { opacity: 0.9; }
-    .info { font-size: 11px; color: #888; margin-top: 12px; }
+    .header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .header img { width: 24px; height: 24px; }
+    .header h1 { font-size: 14px; margin: 0; color: #333; }
+    .status-card {
+      background: #f8f9fa; border-radius: 8px; padding: 12px;
+      border-left: 4px solid #ccc; margin-bottom: 12px;
+    }
+    .status-card.connected { border-left-color: #22c55e; }
+    .status-card.disconnected { border-left-color: #ef4444; }
+    .status-card.connecting { border-left-color: #f59e0b; }
+    .status-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .status-row:last-child { margin-bottom: 0; }
+    .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+    .value { font-size: 13px; color: #333; font-weight: 500; }
+    .value.ok { color: #22c55e; }
+    .value.err { color: #ef4444; }
+    .value.warn { color: #f59e0b; }
+    .indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+    .indicator.on { background: #22c55e; box-shadow: 0 0 4px #22c55e; }
+    .indicator.off { background: #ef4444; }
+    .indicator.pending { background: #f59e0b; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .url-box {
+      font-size: 11px; color: #555; word-break: break-all;
+      background: #fff; padding: 8px; border-radius: 4px;
+      border: 1px solid #e5e7eb; margin-bottom: 12px;
+      max-height: 40px; overflow: hidden;
+    }
+    .actions { display: flex; gap: 8px; margin-bottom: 10px; }
+    button {
+      flex: 1; padding: 8px 12px; border: none; border-radius: 6px;
+      cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.15s;
+    }
+    button.primary { background: #2563eb; color: white; }
+    button.primary:hover { background: #1d4ed8; }
+    button.secondary { background: #e5e7eb; color: #374151; }
+    button.secondary:hover { background: #d1d5db; }
+    button.danger { background: #fee2e2; color: #dc2626; }
+    button.danger:hover { background: #fecaca; }
+    .log { font-size: 10px; color: #999; max-height: 60px; overflow-y: auto; margin-top: 8px; }
+    .log div { padding: 1px 0; border-bottom: 1px solid #f3f4f6; }
+    .footer { font-size: 10px; color: #aaa; text-align: center; margin-top: 10px; }
   </style>
 </head>
 <body>
-  <div class="status">
-    <div class="indicator" id="indicator"></div>
-    <strong id="statusText">Connecting...</strong>
+  <div class="header">
+    <img src="icon48.png" alt="icon">
+    <h1>Chrome Control AMZ</h1>
   </div>
-  
-  <div class="url" id="urlDisplay">Loading...</div>
-  
+
+  <div class="status-card" id="statusCard">
+    <div class="status-row">
+      <span class="label">状态</span>
+      <span class="value" id="statusText"><span class="indicator pending"></span>连接中...</span>
+    </div>
+    <div class="status-row">
+      <span class="label">端口</span>
+      <span class="value" id="portText">—</span>
+    </div>
+    <div class="status-row">
+      <span class="label">服务器</span>
+      <span class="value" id="serverText">—</span>
+    </div>
+    <div class="status-row">
+      <span class="label">重试</span>
+      <span class="value" id="retryText">0</span>
+    </div>
+  </div>
+
+  <div class="url-box" id="urlDisplay">当前标签页: 加载中...</div>
+
   <div class="actions">
-    <button class="secondary" id="refreshBtn">🔄 Refresh</button>
-    <button class="primary" id="reconnectBtn">🔌 Reconnect</button>
+    <button class="secondary" id="refreshBtn">🔄 刷新</button>
+    <button class="primary" id="reconnectBtn">🔌 重连</button>
   </div>
-  
-  <div class="info">
-    <div>Server: ws://localhost:9997</div>
-    <div id="retryInfo"></div>
-  </div>
-  
+
+  <div class="log" id="logBox"></div>
+
+  <div class="footer">v1.0.0 · Chrome Control AMZ</div>
+
   <script>
+    const logBox = document.getElementById("logBox");
+    function addLog(msg) {
+      const d = document.createElement("div");
+      const t = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+      d.textContent = `[${t}] ${msg}`;
+      logBox.prepend(d);
+      if (logBox.children.length > 10) logBox.lastChild.remove();
+    }
+
     async function updateStatus() {
       try {
         const response = await chrome.runtime.sendMessage({ type: "get_status" });
-        const indicator = document.getElementById("indicator");
+        const card = document.getElementById("statusCard");
         const statusText = document.getElementById("statusText");
-        const retryInfo = document.getElementById("retryInfo");
-        
-        if (response.connected) {
-          indicator.className = "indicator connected";
-          statusText.textContent = "✅ Connected";
-          retryInfo.textContent = "";
-        } else {
-          indicator.className = "indicator disconnected";
-          statusText.textContent = "❌ Disconnected";
-          retryInfo.textContent = `Retry attempt: ${response.retry_count || 0}`;
+        const portText = document.getElementById("portText");
+        const serverText = document.getElementById("serverText");
+        const retryText = document.getElementById("retryText");
+
+        // Parse WS URL for port and server
+        let port = "—", server = "—";
+        if (response.ws_url) {
+          try {
+            const u = new URL(response.ws_url);
+            port = u.port || "—";
+            server = u.hostname + ":" + (u.port || "—");
+          } catch { 
+            server = response.ws_url; 
+          }
         }
-        
-        // Get current tab URL
+
+        portText.textContent = port;
+        serverText.textContent = server;
+        retryText.textContent = response.retry_count || 0;
+
+        if (response.connected) {
+          card.className = "status-card connected";
+          statusText.innerHTML = '<span class="indicator on"></span>已连接 ✅';
+          retryText.className = "value";
+          addLog("状态: 已连接");
+        } else {
+          card.className = "status-card disconnected";
+          statusText.innerHTML = '<span class="indicator off"></span>未连接 ❌';
+          retryText.className = "value err";
+          addLog(`状态: 未连接 (重试 ${response.retry_count || 0})`);
+        }
+
+        // Current tab URL
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        document.getElementById("urlDisplay").textContent = tab?.url || "No active tab";
-        
+        document.getElementById("urlDisplay").textContent = "当前标签页: " + (tab?.url || "无");
+
       } catch (e) {
-        document.getElementById("statusText").textContent = "⚠️ Error: " + e.message;
+        document.getElementById("statusCard").className = "status-card disconnected";
+        document.getElementById("statusText").innerHTML = '<span class="indicator off"></span>错误';
+        addLog("错误: " + e.message);
       }
     }
-    
-    document.getElementById("refreshBtn").addEventListener("click", updateStatus);
-    
-    document.getElementById("reconnectBtn").addEventListener("click", async () => {
-      await chrome.runtime.sendMessage({ type: "reconnect" });
+
+    document.getElementById("refreshBtn").addEventListener("click", () => {
+      addLog("手动刷新");
       updateStatus();
     });
-    
-    // Initial update
+
+    document.getElementById("reconnectBtn").addEventListener("click", async () => {
+      addLog("发起重连...");
+      try {
+        await chrome.runtime.sendMessage({ type: "reconnect" });
+        addLog("重连指令已发送");
+        setTimeout(updateStatus, 1500);
+      } catch (e) {
+        addLog("重连失败: " + e.message);
+      }
+    });
+
+    // Listen for status changes from background
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg.type === "status_change") {
+        addLog(msg.connected ? "连接已建立" : "连接已断开");
+        updateStatus();
+      }
+    });
+
+    // Initial + auto refresh
     updateStatus();
+    setInterval(updateStatus, 5000);
   </script>
 </body>
 </html>

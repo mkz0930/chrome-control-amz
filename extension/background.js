@@ -470,8 +470,8 @@ async function cmdDownload(cmd) {
 
 async function getCurrentUrl() {
   try {
-    const tab = await getTargetTab(cmd);
-    return tab.url;
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    return tab?.url || null;
   } catch {
     return null;
   }
