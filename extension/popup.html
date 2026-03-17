@@ -18,8 +18,6 @@
     .status-row:last-child { margin-bottom: 0; }
     .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
     .value { font-size: 13px; color: #333; font-weight: 500; }
-    .value.ok { color: #22c55e; }
-    .value.err { color: #ef4444; }
     .indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
     .indicator.on { background: #22c55e; box-shadow: 0 0 4px #22c55e; }
     .indicator.off { background: #ef4444; }
@@ -27,12 +25,11 @@
       font-size: 11px; color: #555; word-break: break-all;
       background: #fff; padding: 8px; border-radius: 4px;
       border: 1px solid #e5e7eb; margin-bottom: 12px;
-      max-height: 40px; overflow: hidden;
     }
     .actions { display: flex; gap: 8px; margin-bottom: 10px; }
     button {
       flex: 1; padding: 8px 12px; border: none; border-radius: 6px;
-      cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.15s;
+      cursor: pointer; font-size: 12px; font-weight: 500;
     }
     button.primary { background: #2563eb; color: white; }
     button.primary:hover { background: #1d4ed8; }
@@ -52,7 +49,7 @@
   <div class="status-card" id="statusCard">
     <div class="status-row">
       <span class="label">状态</span>
-      <span class="value" id="statusText"><span class="indicator off"></span>加载中...</span>
+      <span class="value" id="statusText"><span class="indicator off"></span>读取中...</span>
     </div>
     <div class="status-row">
       <span class="label">端口</span>
@@ -68,7 +65,7 @@
     </div>
   </div>
 
-  <div class="url-box" id="urlDisplay">当前标签页: 加载中...</div>
+  <div class="url-box" id="urlDisplay">当前标签页: ...</div>
 
   <div class="actions">
     <button class="secondary" id="refreshBtn">🔄 刷新</button>
@@ -76,10 +73,11 @@
   </div>
 
   <div class="log" id="logBox"></div>
-  <div class="footer">v1.1.0 · Chrome Control AMZ</div>
+  <div class="footer">v1.2.0 · Chrome Control AMZ</div>
 
   <script>
-    const logBox = document.getElementById("logBox");
+    const $ = id => document.getElementById(id);
+    const logBox = $("logBox");
 
     function addLog(msg) {
       const d = document.createElement("div");
@@ -89,110 +87,108 @@
       if (logBox.children.length > 15) logBox.lastChild.remove();
     }
 
-    // 方案1: 从 chrome.storage 读状态（不依赖 service worker 活跃）
-    async function readStatusFromStorage() {
-      return new Promise(resolve => {
-        chrome.storage.local.get(["relay_status"], (data) => {
-          resolve(data.relay_status || { connected: false, ws_url: "", retry_count: 0 });
-        });
-      });
-    }
+    // 使用 port 长连接与 service worker 通信
+    let port = null;
 
-    // 方案2: 尝试 sendMessage（service worker 可能活跃）
-    async function readStatusFromSW() {
-      return new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve(null), 1000);
-        chrome.runtime.sendMessage({ type: "get_status" }, (resp) => {
-          clearTimeout(timeout);
-          if (chrome.runtime.lastError) {
-            resolve(null);
-          } else {
-            resolve(resp);
-          }
-        });
-      });
-    }
-
-    async function updateStatus() {
+    function connectPort() {
       try {
-        // 先尝试 sendMessage，失败则从 storage 读
-        let response = await readStatusFromSW();
-        let source = "sw";
-        if (!response) {
-          response = await readStatusFromStorage();
-          source = "storage";
-        }
+        port = chrome.runtime.connect({ name: "popup" });
+        addLog("port 已连接");
 
-        const card = document.getElementById("statusCard");
-        const statusText = document.getElementById("statusText");
-        const portText = document.getElementById("portText");
-        const serverText = document.getElementById("serverText");
-        const retryText = document.getElementById("retryText");
-
-        let port = "—", server = "—";
-        if (response.ws_url) {
-          try {
-            const u = new URL(response.ws_url);
-            port = u.port || "—";
-            server = u.hostname + ":" + (u.port || "—");
-          } catch {
-            server = response.ws_url;
+        port.onMessage.addListener((msg) => {
+          addLog(`收到: ${JSON.stringify(msg).slice(0, 60)}`);
+          if (msg.type === "status_update") {
+            renderStatus(msg);
           }
-        }
+        });
 
-        portText.textContent = port;
-        serverText.textContent = server;
-        retryText.textContent = response.retry_count || 0;
+        port.onDisconnect.addListener(() => {
+          addLog("port 断开");
+          port = null;
+        });
 
-        if (response.connected) {
-          card.className = "status-card connected";
-          statusText.innerHTML = '<span class="indicator on"></span>已连接 ✅';
-        } else {
-          card.className = "status-card disconnected";
-          statusText.innerHTML = '<span class="indicator off"></span>未连接 ❌';
-        }
-
-        // 当前标签页
-        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        document.getElementById("urlDisplay").textContent = "当前标签页: " + (tab?.url || "无");
-
-        addLog(`状态刷新 (${source}): ${response.connected ? "已连接" : "未连接"}`);
+        // 连接后立即请求状态
+        port.postMessage({ type: "get_status" });
       } catch (e) {
-        addLog("错误: " + e.message);
+        addLog("port 连接失败: " + e.message);
+        // fallback: 从 storage 读
+        readFromStorage();
       }
+    }
+
+    function readFromStorage() {
+      chrome.storage.local.get(["relay_status"], (data) => {
+        if (data.relay_status) {
+          addLog("从 storage 读取");
+          renderStatus(data.relay_status);
+        } else {
+          addLog("storage 无数据");
+        }
+      });
+    }
+
+    function renderStatus(data) {
+      const card = $("statusCard");
+      const isConn = data.connected;
+
+      card.className = "status-card " + (isConn ? "connected" : "disconnected");
+      $("statusText").innerHTML = isConn
+        ? '<span class="indicator on"></span>已连接 ✅'
+        : '<span class="indicator off"></span>未连接 ❌';
+
+      let portVal = "—", serverVal = "—";
+      const wsUrl = data.ws_url || "";
+      if (wsUrl) {
+        try {
+          const u = new URL(wsUrl);
+          portVal = u.port || "—";
+          serverVal = u.hostname + ":" + (u.port || "—");
+        } catch { serverVal = wsUrl; }
+      }
+      $("portText").textContent = portVal;
+      $("serverText").textContent = serverVal;
+      $("retryText").textContent = data.retry_count || 0;
     }
 
     // 刷新按钮
-    document.getElementById("refreshBtn").addEventListener("click", () => {
-      addLog("手动刷新...");
-      updateStatus();
-    });
+    $("refreshBtn").onclick = () => {
+      addLog("手动刷新");
+      if (port) {
+        port.postMessage({ type: "get_status" });
+      } else {
+        readFromStorage();
+        connectPort();
+      }
+    };
 
     // 重连按钮
-    document.getElementById("reconnectBtn").addEventListener("click", () => {
+    $("reconnectBtn").onclick = () => {
       addLog("发起重连...");
-      chrome.runtime.sendMessage({ type: "reconnect" }, (resp) => {
-        if (chrome.runtime.lastError) {
-          addLog("⚠️ SW 未响应: " + chrome.runtime.lastError.message);
-        } else {
-          addLog("✅ 重连指令已发送");
-        }
-        setTimeout(updateStatus, 2000);
-      });
+      if (port) {
+        port.postMessage({ type: "reconnect" });
+      } else {
+        // 尝试重新建立 port
+        connectPort();
+        setTimeout(() => {
+          if (port) port.postMessage({ type: "reconnect" });
+        }, 500);
+      }
+    };
+
+    // 获取当前标签页
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      $("urlDisplay").textContent = "当前标签页: " + (tabs[0]?.url || "无");
     });
 
-    // 监听 storage 变化（background 写入时实时更新）
+    // storage 变化监听
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === "local" && changes.relay_status) {
-        const s = changes.relay_status.newValue;
-        addLog(`状态变化: ${s.connected ? "已连接" : "已断开"}`);
-        updateStatus();
+        renderStatus(changes.relay_status.newValue);
       }
     });
 
-    // 初始化
-    updateStatus();
-    setInterval(updateStatus, 5000);
+    // 启动
+    connectPort();
   </script>
 </body>
 </html>

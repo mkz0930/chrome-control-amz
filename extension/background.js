@@ -516,14 +516,49 @@ function sendHeartbeat() {
   }
 }
 
-// ── Message handler (popup buttons) ──
+// ── Port 长连接 (popup 通信) ──
+const popupPorts = new Set();
+
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "popup") return;
+  log("📱 popup port connected");
+  popupPorts.add(port);
+
+  port.onMessage.addListener((msg) => {
+    log(`📩 popup port msg: ${msg.type}`);
+    if (msg.type === "get_status") {
+      syncStatusToStorage();
+      port.postMessage({ type: "status_update", connected, ws_url: WS_URL, retry_count: retryCount });
+    } else if (msg.type === "reconnect") {
+      log("🔌 manual reconnect via port");
+      retryCount = 0;
+      if (ws) { try { ws.close(); } catch(e) {} }
+      ws = null;
+      setTimeout(() => {
+        connect();
+        // 连接后通知 popup
+        setTimeout(() => {
+          syncStatusToStorage();
+          port.postMessage({ type: "status_update", connected, ws_url: WS_URL, retry_count: retryCount });
+        }, 2000);
+      }, 300);
+      port.postMessage({ type: "status_update", connected: false, ws_url: WS_URL, retry_count: 0, reconnecting: true });
+    }
+  });
+
+  port.onDisconnect.addListener(() => {
+    log("📱 popup port disconnected");
+    popupPorts.delete(port);
+  });
+});
+
+// 兼容旧的 sendMessage 方式
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  log(`📩 popup message: ${msg.type}`);
+  log(`📩 popup sendMessage: ${msg.type}`);
   if (msg.type === "get_status") {
     syncStatusToStorage();
     sendResponse({ connected, ws_url: WS_URL, retry_count: retryCount });
   } else if (msg.type === "reconnect") {
-    log("🔌 manual reconnect triggered");
     retryCount = 0;
     if (ws) { try { ws.close(); } catch(e) {} }
     ws = null;
@@ -535,6 +570,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // ── Initialize ──
 log("🚀 OpenClaw Browser Relay starting...");
+syncStatusToStorage(); // 启动时立即写一次 storage
 connect();
 
 // Keep service worker alive
