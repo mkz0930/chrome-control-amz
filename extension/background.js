@@ -5,7 +5,7 @@ let ws = null;
 let connected = false;
 let retryCount = 0;
 const MAX_RETRIES = 10;
-const WS_URL = "ws://localhost:19000";
+const WS_URL = "ws://172.25.4.135:19000";
 
 // Timestamped logging
 function log(...args) {
@@ -104,11 +104,15 @@ function broadcastStatus(online) {
 
 async function getTargetTab(cmd) {
   if (cmd.tabId) {
-    const tab = await chrome.tabs.get(cmd.tabId);
-    return tab;
+    return await chrome.tabs.get(cmd.tabId);
   }
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tab;
+  // service worker 没有 currentWindow，按优先级查找
+  let [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (tab) return tab;
+  [tab] = await chrome.tabs.query({ active: true });
+  if (tab) return tab;
+  // 没有 active tab，创建一个
+  return await chrome.tabs.create({ url: cmd.url || "about:blank" });
 }
 
 async function handleCommand(cmd) {
@@ -225,8 +229,20 @@ async function cmdScreenshot(cmd) {
 }
 
 async function cmdNavigate(cmd) {
-  const tab = await getTargetTab(cmd);
-  await chrome.tabs.update(tab.id, { url: cmd.url });
+  let tab;
+  if (cmd.tabId) {
+    tab = await chrome.tabs.get(cmd.tabId);
+    await chrome.tabs.update(tab.id, { url: cmd.url });
+  } else {
+    // 无 tabId：尝试找 active tab，找不到就创建
+    const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (tabs.length > 0) {
+      tab = tabs[0];
+      await chrome.tabs.update(tab.id, { url: cmd.url });
+    } else {
+      tab = await chrome.tabs.create({ url: cmd.url });
+    }
+  }
   
   if (cmd.waitForLoad !== false) {
     await waitForTabLoad(tab.id, cmd.timeout || 30000);
