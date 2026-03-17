@@ -5,7 +5,7 @@ let ws = null;
 let connected = false;
 let retryCount = 0;
 const MAX_RETRIES = 10;
-const WS_URL = "ws://172.25.0.1:19001";
+const WS_URL = "ws://172.25.0.1:19000";
 
 // Timestamped logging
 function log(...args) {
